@@ -1,0 +1,475 @@
+#=========================================================
+# METRICX - SYR 2026
+# Reduction de dimension avant clustering
+# EHCVM Sénégal 2021
+# Ménages, chocs et résilience : une lecture multidimensionnelle du Sénégal
+#=========================================================
+
+library(tidyverse)
+library(readxl)
+library(FactoMineR)
+library(factoextra)
+library(corrplot)
+library(janitor)
+library(writexl)
+
+#=========================================================
+# 1. IMPORT
+#=========================================================
+IN <- "./data/clean"
+OUT <- "./data/clean"
+
+base  <- read_xlsx(file.path(IN, "base_finale_metricx.xlsx"))
+#View(base)
+#=========================================================
+# 2. NOMS PROPRES
+#=========================================================
+
+names(base) <- names(base) |>
+  janitor::make_clean_names()
+
+#=========================================================
+# 3. VARIABLES FACTEURS
+#=========================================================
+
+vars_quali <- c(
+
+  "milieu",
+  "sexe_cm",
+  "situation_matri_cm",
+  "niv_edu_cm",
+  "alphabetise_cm",
+
+  "activ_7j_cm",
+  "branche_activ_cm",
+  "csp_cm",
+  "sect_inst_cm",
+
+  "frigo",
+  "tv",
+  "ordin",
+  "car",
+
+  "mur",
+  "toit",
+  "sol",
+
+  "logem",
+
+  "elec_ac",
+
+  "eauboi_sp",
+
+  "toilet",
+
+  "ordure",
+
+  "sh_co_natu",
+  "sh_co_eco",
+  "sh_id_demo",
+  "sh_id_eco",
+
+  "bank",
+  "internet"
+)
+
+base[vars_quali] <- lapply(
+  base[vars_quali],
+  as.factor
+)
+
+
+#=========================================================
+# 4. RECODAGE
+#=========================================================
+
+base <- base %>%
+
+  mutate(
+
+#------------------------------------
+# milieu
+#------------------------------------
+
+milieu =
+fct_recode(milieu,
+           urbain="Urbain",
+           rural ="Rural"),
+
+#------------------------------------
+# sexe
+#------------------------------------
+
+sexe_cm =
+fct_recode(sexe_cm,
+           homme="Masculin",
+           femme="Féminin"),
+
+#------------------------------------
+# education
+#------------------------------------
+
+educ_cat = case_when(
+
+niv_edu_cm=="Aucun" ~
+  "aucune",
+
+niv_edu_cm=="Primaire" ~
+  "primaire",
+
+niv_edu_cm %in%
+  c(
+    "Second. gl 1",
+    "Second. gl 2",
+    "Second. tech. 1",
+    "Second. tech. 2"
+  )
+~ "secondaire",
+
+TRUE ~ "superieur"
+
+),
+
+#------------------------------------
+# statut matrimonial
+#------------------------------------
+
+statut_mat = case_when(
+
+situation_matri_cm %in%
+c(
+"Marie(e) monogame",
+"Marie(e) polygame"
+)
+~ "marie",
+
+situation_matri_cm %in%
+c(
+"Veuf(ve)",
+"Divorce(e)",
+"Separe(e)"
+)
+~ "veuf_div_sep",
+
+TRUE
+~ "celibataire"
+
+),
+
+#------------------------------------
+# activite
+#------------------------------------
+
+activite_cat = case_when(
+
+activ_7j_cm=="Occupe"
+~ "occupe",
+
+activ_7j_cm=="Chomeur"
+~ "chomeur",
+
+TRUE
+~ "inactif"
+
+),
+
+#------------------------------------
+# branche
+#------------------------------------
+
+branche_cat = case_when(
+
+branche_activ_cm %in%
+c(
+"Agriculture",
+"Elevage/syl./peche"
+)
+~ "agriculture",
+
+branche_activ_cm %in%
+c(
+"Commerce",
+"Restaurant/Hotel",
+"Services perso.",
+"Trans./Comm.",
+"Aut. services"
+)
+~ "services",
+
+branche_activ_cm %in%
+c(
+"BTP",
+"Autr. indust.",
+"Indust. extr."
+)
+~ "industrie",
+
+branche_activ_cm=="Education/Sante"
+~ "educ_sante",
+
+TRUE
+~ "non_occupe"
+
+),
+
+#------------------------------------
+# CSP
+#------------------------------------
+
+csp_cat = case_when(
+
+csp_cm %in%
+c(
+"Cadre supérieur",
+"Cadre moyen/agent de maîtrise"
+)
+~ "cadre",
+
+csp_cm=="Travailleur pour compte propre"
+~ "compte_propre",
+
+csp_cm %in%
+c(
+"Ouvrier ou employé qualifié",
+"Ouvrier ou employé non qualifié"
+)
+~ "salarie",
+
+csp_cm=="Non occupe"
+~ "non_occupe",
+
+TRUE
+~ "autre"
+
+),
+
+#------------------------------------
+# secteur
+#------------------------------------
+
+secteur_cat = case_when(
+
+sect_inst_cm=="Entreprise Privée"
+~ "prive",
+
+sect_inst_cm %in%
+c(
+"Etat/Collectivités locales",
+"Entreprise publique/ parapublique"
+)
+~ "public",
+
+sect_inst_cm=="Non occupe"
+~ "non_occupe",
+
+TRUE
+~ "autre"
+
+),
+
+#------------------------------------
+# logement
+#------------------------------------
+
+logement_cat = case_when(
+
+logem %in%
+c(
+"Proprietaire titre",
+"Proprietaire sans titre"
+)
+~ "proprietaire",
+
+logem=="Locataire"
+~ "locataire",
+
+TRUE
+~ "autre"
+
+)
+
+)
+
+# CONSTRUCTION D'UN SCORE DE CHOCS
+
+base <- base %>%
+  
+  mutate(
+    
+    nb_chocs =
+      
+      (sh_co_natu=="Oui") +
+      (sh_co_eco=="Oui") +
+      (sh_id_demo=="Oui") +
+      (sh_id_eco=="Oui"),
+    
+    choc_cat = case_when(
+      
+      nb_chocs==0 ~ "aucun",
+      
+      nb_chocs==1 ~ "un_choc",
+      
+      nb_chocs>=2 ~ "multi_chocs"
+      
+    )
+    
+  )
+
+
+#=========================================================
+# 5. ACM
+#=========================================================
+
+vars_acm <- c(
+  
+  "milieu",
+  "sexe_cm",
+  
+  "educ_cat",
+  "statut_mat",
+  
+  "activite_cat",
+  "branche_cat",
+  
+  "csp_cat",
+  "secteur_cat",
+  
+  "frigo",
+  "tv",
+  "ordin",
+  "car",
+  
+  "mur",
+  "toit",
+  "sol",
+  
+  "logement_cat",
+  
+  "elec_ac",
+  "eauboi_sp",
+  
+  "toilet",
+  "ordure",
+  
+  "choc_cat",
+  
+  "bank",
+  "internet"
+  
+)
+
+acm <- MCA(
+  base[vars_acm],
+  graph = FALSE
+)
+
+fviz_screeplot(acm)
+
+fviz_mca_var(
+  acm,
+  repel=TRUE
+)
+
+  # VARIABLES QUANTITATIVES
+  
+vars_quanti <- c(
+  
+  "taille_men",
+  
+  "superf",
+  
+  "dtot",
+  
+  "dali",
+  
+  "dnal",
+  
+  "pcexp"
+  
+)
+
+  
+  # MATRICE DE CORRELATION
+  
+quanti <- base %>%
+  select(all_of(vars_quanti))
+
+cor_mat <- cor(
+  quanti,
+  use="pairwise.complete.obs"
+)
+
+corrplot(
+  cor_mat,
+  method="color"
+)
+  
+  # ACP
+  
+acp <- PCA(
+  quanti,
+  scale.unit = TRUE,
+  graph = FALSE
+)
+
+fviz_screeplot(acp)
+
+fviz_pca_var(acp)
+
+
+# Pour définir les noms des dimensions
+
+acm$var$contrib[,1] %>%
+  sort(decreasing = TRUE) %>%
+  head(30)
+
+acm$var$contrib[,2] %>%
+  sort(decreasing = TRUE) %>%
+  head(30)
+acm$var$contrib[,3] %>%
+  sort(decreasing = TRUE) %>%
+  head(30)
+acm$var$contrib[,4] %>%
+  sort(decreasing = TRUE) %>%
+  head(30)
+
+acp$var$coord[,1] %>%
+  sort()
+acp$var$coord[,2] %>%
+  sort()
+
+# Interprétation et nommage des dimensions
+# Les axes issus de l’ACP et de l’ACM ont été interprétés à partir des variables 
+# ayant les plus fortes contributions.
+
+# ACM :
+# Les dimensions reflètent principalement les conditions de vie, 
+# l’insertion socio-professionnelle et le statut socio-économique des ménages.
+
+# ACP :
+# Les dimensions reflètent essentiellement le niveau global de consommation 
+# ainsi que la structure du ménage et les conditions d’habitat.
+
+  # BASE FINALE POUR LE CLUSTERING
+base_clust <- cbind(base,
+  
+  acm$ind$coord[,1:4],
+  
+  acp$ind$coord[,1:2]
+  
+)
+colnames(base_clust)[97:102] <- c(
+  
+  "precarite_structurelle_conditions_vie",
+  "capital_humain_insertion_eco",
+  "position_sociopro_emploiquali",
+  "vuln_soc_fam",
+  
+  "depenses_globales",
+  "structure_menage_vs_conso_par_tete"
+  
+)
+cor(base_clust[,97:102])
+#View(base_clust)
+
+write_xlsx(base_clust, file.path(OUT, "base_clustering.xlsx"))
